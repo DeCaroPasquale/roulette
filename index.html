@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Calcolatore gratuito di roulette europea e americana: probabilità, valore atteso, copertura e visualizzazione della puntata."
+    />
+    <meta name="theme-color" content="#10251f" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230d3027'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23f8d57e' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23f8d57e'/%3E%3C/svg%3E" />
+    <title>Roulette Chiara — calcolatore gratuito</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#calculator">Vai al calcolatore</a>
+    <div id="app-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="Roulette Chiara, inizio pagina">
+          <span class="brand-mark" aria-hidden="true">R</span>
+          <span>
+            <strong>Roulette Chiara</strong>
+            <small>Matematica aperta. Nessun costo.</small>
+          </span>
+        </a>
+        <div class="header-pill">100% locale · nessun account</div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero shell">
+        <div class="hero-copy">
+          <p class="eyebrow">Calcolatore educativo gratuito</p>
+          <h1>Vedi la matematica della tua puntata, non una promessa.</h1>
+          <p class="hero-text">
+            Costruisci una giocata sulla roulette europea o americana. Le probabilità,
+            il valore atteso e il rischio si aggiornano in tempo reale sul tuo dispositivo.
+          </p>
+          <div class="hero-points" aria-label="Caratteristiche principali">
+            <span>0 e 0+00</span>
+            <span>SVG esportabile</span>
+            <span>Nessuna API</span>
+          </div>
+        </div>
+        <aside class="truth-card" aria-label="Promessa di trasparenza">
+          <span class="truth-icon" aria-hidden="true">÷</span>
+          <div>
+            <strong>Nessun “numero caldo”</strong>
+            <p>Ogni giro è indipendente. Qui trovi solo calcoli verificabili.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section id="calculator" class="shell calculator-layout" aria-label="Calcolatore roulette">
+        <div class="workspace">
+          <section class="panel control-panel" aria-labelledby="setup-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">1. Configura</p>
+                <h2 id="setup-title">Tavolo e budget</h2>
+              </div>
+              <span class="local-badge">Dati solo nel browser</span>
+            </div>
+
+            <fieldset class="variant-switch" aria-label="Variante roulette">
+              <legend>Variante</legend>
+              <label class="variant-option">
+                <input type="radio" name="variant" value="european" checked />
+                <span>
+                  <strong>Europea</strong>
+                  <small>1 zero · 37 esiti</small>
+                </span>
+              </label>
+              <label class="variant-option">
+                <input type="radio" name="variant" value="american" />
+                <span>
+                  <strong>Americana</strong>
+                  <small>0 + 00 · 38 esiti</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <div class="settings-grid">
+              <label>
+                <span>Unità di puntata</span>
+                <div class="input-wrap currency-wrap">
+                  <span aria-hidden="true">€</span>
+                  <input id="chip-input" type="number" min="0.1" step="0.1" value="5" inputmode="decimal" />
+                </div>
+              </label>
+              <label>
+                <span>Budget di riferimento</span>
+                <div class="input-wrap currency-wrap">
+                  <span aria-hidden="true">€</span>
+                  <input id="budget-input" type="number" min="1" step="1" value="100" inputmode="decimal" />
+                </div>
+              </label>
+              <label>
+                <span>Giri per perdita attesa</span>
+                <div class="input-wrap">
+                  <input id="spins-input" type="number" min="1" max="10000" step="1" value="10" inputmode="numeric" />
+                  <span aria-hidden="true">giri</span>
+                </div>
+              </label>
+            </div>
+
+            <div class="math-note" id="variant-note"></div>
+          </section>
+
+          <section class="panel board-panel" aria-labelledby="board-title">
+            <div class="panel-heading board-heading">
+              <div>
+                <p class="eyebrow">2. Componi</p>
+                <h2 id="board-title">Metti le fiches</h2>
+              </div>
+              <div class="chip-legend">
+                <span class="chip-dot" aria-hidden="true"></span>
+                Ogni clic aggiunge <strong id="chip-value-label">€5,00</strong>
+              </div>
+            </div>
+
+            <div class="bet-tools">
+              <div class="quick-bets" id="quick-bets" role="group" aria-label="Puntate esterne rapide"></div>
+              <label class="inside-select-label" for="inside-bet-select">
+                <span>Puntate interne</span>
+                <div class="select-row">
+                  <select id="inside-bet-select" aria-label="Scegli una puntata interna"></select>
+                  <button id="add-inside-bet" class="button secondary" type="button" disabled>Aggiungi</button>
+                </div>
+              </label>
+            </div>
+
+            <p id="board-help" class="board-help">
+              Clicca un numero per aggiungere un <strong>pieno</strong>. Per split, strade, carré e sestine usa il menu sopra.
+            </p>
+            <p class="board-scroll-hint" aria-hidden="true">Scorri lateralmente per vedere tutto il tavolo →</p>
+            <div id="roulette-board" class="roulette-board" role="region" aria-label="Tavolo della roulette" aria-describedby="board-help"></div>
+          </section>
+        </div>
+
+        <aside class="analysis-column" aria-label="Analisi della puntata">
+          <section class="panel ticket-panel" aria-labelledby="ticket-title">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">La tua giocata</p>
+                <h2 id="ticket-title">Fiches selezionate</h2>
+              </div>
+              <div class="ticket-actions">
+                <button id="undo-bet" class="text-button" type="button" disabled>Annulla ultima</button>
+                <button id="clear-bets" class="text-button danger" type="button" disabled>Azzera tavolo</button>
+              </div>
+            </div>
+            <div id="ticket-list" class="ticket-list"></div>
+            <div class="ticket-total">
+              <span>Esposizione per giro</span>
+              <strong id="total-stake">€0,00</strong>
+            </div>
+          </section>
+
+          <section class="panel metrics-panel" aria-labelledby="math-title">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">3. Leggi i numeri</p>
+                <h2 id="math-title">Probabilità e rischio</h2>
+              </div>
+              <span id="edge-badge" class="edge-badge">—</span>
+            </div>
+
+            <div id="metrics-grid" class="metrics-grid"></div>
+            <div id="risk-message" class="risk-message"></div>
+          </section>
+
+          <section class="panel actions-panel" aria-labelledby="visual-title">
+            <div>
+              <p class="eyebrow">4. Visualizza</p>
+              <h2 id="visual-title">Controlla la tua scelta</h2>
+            </div>
+            <p>
+              Genera una scheda visiva della configurazione selezionata. Non predice il prossimo esito.
+            </p>
+            <p id="action-help" class="action-help">Aggiungi una puntata per creare una scheda o avviare una simulazione.</p>
+            <button id="show-ticket" class="button primary full-width" type="button" aria-describedby="action-help" disabled>Mostra scheda visiva</button>
+            <button id="simulate-button" class="button ghost full-width" type="button" aria-describedby="action-help" disabled>Simula 1.000 giri</button>
+            <div id="simulation-result" class="simulation-result" aria-live="polite"></div>
+          </section>
+        </aside>
+      </section>
+
+      <section id="visual-output" class="shell visual-output" hidden aria-labelledby="visual-output-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Scheda esportabile</p>
+            <h2 id="visual-output-title" tabindex="-1">Configurazione della giocata</h2>
+          </div>
+          <div class="visual-actions">
+            <button id="download-svg" class="button ghost" type="button">Scarica SVG</button>
+            <button id="download-png" class="button secondary" type="button">Scarica PNG</button>
+            <button id="close-visual" class="text-button" type="button">Chiudi</button>
+          </div>
+        </div>
+        <p class="visual-disclaimer">
+          Questa grafica descrive la puntata selezionata e le sue probabilità teoriche. Non è un consiglio di gioco né una previsione.
+        </p>
+        <div id="ticket-visual" class="ticket-visual"></div>
+      </section>
+
+      <section class="shell learning-grid" aria-label="Note sul funzionamento">
+        <article>
+          <span class="learn-number">01</span>
+          <h2>Probabilità esatte</h2>
+          <p>Il calcolo valuta tutti i 37 o 38 esiti possibili: nessuna stima nascosta, nessun modello AI.</p>
+        </article>
+        <article>
+          <span class="learn-number">02</span>
+          <h2>Combinazioni corrette</h2>
+          <p>Se le puntate si sovrappongono, viene calcolato il risultato netto di ogni singolo esito.</p>
+        </article>
+        <article>
+          <span class="learn-number">03</span>
+          <h2>Limiti prima di tutto</h2>
+          <p>Il budget è un riferimento personale, non un obiettivo da recuperare. Puoi sempre scegliere di non puntare.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <p>Roulette Chiara è un progetto gratuito, open source e solo informativo.</p>
+        <p>Nessun conto, nessun pagamento, nessun collegamento a casinò.</p>
+      </div>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

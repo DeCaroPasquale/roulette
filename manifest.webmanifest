@@ -1,0 +1,10 @@
+{
+  "name": "Roulette Chiara",
+  "short_name": "Roulette Chiara",
+  "lang": "it",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ed",
+  "theme_color": "#10251f",
+  "description": "Calcolatore gratuito di roulette europea e americana, senza account o servizi esterni."
+}
