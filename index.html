@@ -173,9 +173,38 @@
             <div id="risk-message" class="risk-message"></div>
           </section>
 
+          <section class="panel next-spin-panel" aria-labelledby="next-spin-title">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">4. Osserva</p>
+                <h2 id="next-spin-title">Prossimo giro: probabilità</h2>
+              </div>
+              <span class="edge-badge">Teoriche</span>
+            </div>
+            <p id="next-spin-help" class="next-spin-intro">
+              Registra un esito per confrontare il tuo storico con la matematica. In una roulette corretta,
+              l’ultimo risultato non cambia le probabilità del giro successivo.
+            </p>
+            <div class="outcome-entry">
+              <label for="outcome-select">Esito appena uscito</label>
+              <div class="select-row">
+                <select id="outcome-select" aria-describedby="next-spin-help">
+                  <option value="">Seleziona un numero…</option>
+                </select>
+                <button id="record-outcome" class="button secondary" type="button" disabled>Registra</button>
+              </div>
+            </div>
+            <div class="history-actions">
+              <span id="history-count" class="history-count">Nessun esito registrato</span>
+              <button id="undo-outcome" class="text-button" type="button" disabled>Annulla ultimo</button>
+              <button id="clear-history" class="text-button danger" type="button" disabled>Azzera storico</button>
+            </div>
+            <div id="next-spin-result" class="next-spin-result" aria-live="polite"></div>
+          </section>
+
           <section class="panel actions-panel" aria-labelledby="visual-title">
             <div>
-              <p class="eyebrow">4. Visualizza</p>
+              <p class="eyebrow">5. Visualizza</p>
               <h2 id="visual-title">Controlla la tua scelta</h2>
             </div>
             <p>

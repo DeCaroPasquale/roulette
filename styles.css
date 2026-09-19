@@ -951,6 +951,146 @@ h2 {
   color: var(--green-800);
 }
 
+.next-spin-intro {
+  margin: 0.7rem 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.outcome-entry {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.outcome-entry > label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+  margin-top: 0.7rem;
+}
+
+.history-count {
+  flex: 1 1 100%;
+  color: var(--green-700);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.history-actions .text-button {
+  min-height: 2rem;
+  font-size: 0.75rem;
+}
+
+.next-spin-result {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.next-spin-summary {
+  padding: 0.72rem 0.78rem;
+  border-left: 3px solid var(--green-700);
+  border-radius: 0.1rem 0.56rem 0.56rem 0.1rem;
+  background: #eef5ef;
+  color: #365446;
+  font-size: 0.79rem;
+}
+
+.next-spin-groups {
+  display: grid;
+  gap: 0.52rem;
+}
+
+.next-spin-group {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #dce6dc;
+  border-radius: 0.68rem;
+  background: #fbfdfb;
+}
+
+.next-spin-group h3 {
+  margin: 0 0 0.42rem;
+  color: var(--green-800);
+  font-size: 0.77rem;
+}
+
+.next-spin-group dl {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.next-spin-group dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.next-spin-group dt,
+.next-spin-group dd {
+  margin: 0;
+}
+
+.next-spin-group dd {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.history-observation {
+  padding: 0.78rem;
+  border: 1px solid #d8e4d9;
+  border-radius: 0.7rem;
+  background: #f7faf7;
+  color: #486052;
+  font-size: 0.76rem;
+}
+
+.history-observation > strong {
+  display: block;
+  color: var(--green-900);
+}
+
+.history-observation p {
+  margin: 0.28rem 0 0.62rem;
+}
+
+.empty-observation p {
+  margin-bottom: 0;
+}
+
+.transition-list {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.transition-row {
+  display: grid;
+  gap: 0.08rem;
+  padding-top: 0.42rem;
+  border-top: 1px solid #e0e9e1;
+}
+
+.transition-row span {
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.transition-row strong {
+  color: #405b4c;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
 .actions-panel p {
   margin: 0.65rem 0 1rem;
   color: var(--muted);

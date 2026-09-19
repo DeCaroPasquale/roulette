@@ -1,14 +1,20 @@
 import {
   VARIANTS,
   analyzeBets,
+  classifyOutcome,
   coveredNumbers,
   exposureOnNumber,
   getBetCatalog,
+  getEventLabel,
   getInsideBets,
+  getNextSpinAnalysis,
   getNumberColor,
   getOutsideBets,
   getStraightBets,
+  getTransitionSummary,
+  isValidOutcome,
   makeTicket,
+  NEXT_SPIN_GROUPS,
   simulateBets,
 } from "./math.js";
 
@@ -23,6 +29,11 @@ const percentage = new Intl.NumberFormat("it-IT", {
   style: "percent",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+});
+
+const decimal = new Intl.NumberFormat("it-IT", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
 });
 
 const dom = {
@@ -46,6 +57,12 @@ const dom = {
   showTicket: document.querySelector("#show-ticket"),
   simulateButton: document.querySelector("#simulate-button"),
   simulationResult: document.querySelector("#simulation-result"),
+  outcomeSelect: document.querySelector("#outcome-select"),
+  recordOutcome: document.querySelector("#record-outcome"),
+  historyCount: document.querySelector("#history-count"),
+  undoOutcome: document.querySelector("#undo-outcome"),
+  clearHistory: document.querySelector("#clear-history"),
+  nextSpinResult: document.querySelector("#next-spin-result"),
   visualOutput: document.querySelector("#visual-output"),
   visualOutputTitle: document.querySelector("#visual-output-title"),
   ticketVisual: document.querySelector("#ticket-visual"),
@@ -56,6 +73,7 @@ const dom = {
 };
 
 const STORAGE_KEY = "roulette-chiara-v1";
+const MAX_HISTORY = 500;
 const numberRows = [
   Array.from({ length: 12 }, (_, index) => 3 + index * 3),
   Array.from({ length: 12 }, (_, index) => 2 + index * 3),
@@ -72,6 +90,11 @@ const defaults = {
   notice: "",
   simulation: null,
   undoSnapshot: null,
+  historyByVariant: {
+    european: [],
+    american: [],
+  },
+  historyUndo: null,
 };
 
 const state = restoreState();
@@ -89,6 +112,10 @@ function restoreState() {
         return baseBet && stake > 0 ? [makeTicket(baseBet, stake)] : [];
       })
       : [];
+    const historyByVariant = {
+      european: normalizeHistory(stored.historyByVariant?.european, "european"),
+      american: normalizeHistory(stored.historyByVariant?.american, "american"),
+    };
     return {
       ...defaults,
       ...stored,
@@ -101,10 +128,19 @@ function restoreState() {
       notice: "",
       simulation: null,
       undoSnapshot: null,
+      historyByVariant,
+      historyUndo: null,
     };
   } catch {
     return { ...defaults };
   }
+}
+
+function normalizeHistory(history, variantId) {
+  return (Array.isArray(history) ? history : [])
+    .map(String)
+    .filter((outcome) => isValidOutcome(outcome, variantId))
+    .slice(-MAX_HISTORY);
 }
 
 function persistState() {
@@ -115,6 +151,7 @@ function persistState() {
       budget: state.budget,
       spins: state.spins,
       bets: state.bets,
+      historyByVariant: state.historyByVariant,
     }));
   } catch {
     // Il calcolatore deve funzionare anche se il browser blocca localStorage.
@@ -162,6 +199,13 @@ function formatPercent(value) {
   return percentage.format(Number.isFinite(value) ? value : 0);
 }
 
+function formatPercentagePoints(value) {
+  const points = (Number.isFinite(value) ? value : 0) * 100;
+  if (points > 0) return `+${decimal.format(points)} p.p.`;
+  if (points < 0) return `−${decimal.format(Math.abs(points))} p.p.`;
+  return "0,0 p.p.";
+}
+
 function getAnalysis() {
   return analyzeBets(state.bets, state.variantId);
 }
@@ -186,6 +230,7 @@ function renderAll({ syncInputs = true, focusSelector = "" } = {}) {
   renderBoard();
   renderTicket();
   renderMetrics();
+  renderNextSpinPanel();
   renderActions();
   renderSimulation();
   dom.chipValueLabel.textContent = formatCurrency(state.chip);
@@ -396,6 +441,120 @@ function renderRiskMessage(analysis) {
   dom.riskMessage.textContent = `Esposizione: ${formatPercent(exposureRatio)} del budget. L'opzione più sicura resta non puntare; se scegli di farlo, un limite prudente è non superare ${formatCurrency(suggestedUnit)} per unità.`;
 }
 
+function getCurrentHistory() {
+  const current = state.historyByVariant[state.variantId];
+  if (Array.isArray(current)) return current;
+  state.historyByVariant[state.variantId] = [];
+  return state.historyByVariant[state.variantId];
+}
+
+function describeOutcome(outcome) {
+  const classified = classifyOutcome(outcome);
+  if (!classified) return String(outcome);
+  if (classified.color === "zero") return `${outcome} · zero`;
+  return [
+    outcome,
+    getEventLabel(classified.color, state.variantId),
+    getEventLabel(classified.parity, state.variantId),
+    getEventLabel(classified.range, state.variantId),
+  ].join(" · ");
+}
+
+function oppositeEvent(eventId) {
+  return {
+    red: "black",
+    black: "red",
+    even: "odd",
+    odd: "even",
+    low: "high",
+    high: "low",
+    zero: "red",
+  }[eventId] ?? "red";
+}
+
+function renderHistoricalTransitions(history, latestOutcome) {
+  if (!latestOutcome) {
+    return `
+      <div class="history-observation empty-observation">
+        <strong>Storico osservato</strong>
+        <p>Registra almeno due esiti per vedere i passaggi registrati. Lo storico resta sul tuo dispositivo.</p>
+      </div>
+    `;
+  }
+
+  const classified = classifyOutcome(latestOutcome);
+  const rows = [
+    ["Colore", classified.color],
+    ["Pari o dispari", classified.parity],
+    ["Fascia", classified.range],
+  ].map(([label, fromEvent]) => {
+    const toEvent = oppositeEvent(fromEvent);
+    const summary = getTransitionSummary(history, state.variantId, fromEvent, toEvent);
+    const transitionLabel = `${getEventLabel(fromEvent, state.variantId)} → ${getEventLabel(toEvent, state.variantId)}`;
+    const observed = summary.samples > 0
+      ? `${summary.matches}/${summary.samples} · ${formatPercent(summary.observedRate)} osservato · ${formatPercentagePoints(summary.observedRate - summary.theoreticalRate)} rispetto alla teoria`
+      : "Nessun passaggio precedente nel tuo storico";
+    return `
+      <div class="transition-row">
+        <span>${label} · ${transitionLabel}</span>
+        <strong>${observed}</strong>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="history-observation">
+      <strong>Nel tuo storico: confronto descrittivo</strong>
+      <p>Un valore osservato diverso dalla teoria può dipendere dal caso; non stima il giro successivo.</p>
+      <div class="transition-list">${rows}</div>
+    </div>
+  `;
+}
+
+function renderNextSpinPanel() {
+  const variant = VARIANTS[state.variantId];
+  const history = getCurrentHistory();
+  const latestOutcome = history.at(-1) ?? null;
+  const remembered = dom.outcomeSelect.value;
+  const pockets = variant.pockets.map(String);
+  dom.outcomeSelect.innerHTML = [
+    "<option value=\"\">Seleziona un numero…</option>",
+    ...pockets.map((outcome) => `<option value="${outcome}">Numero ${outcome}</option>`),
+  ].join("");
+  dom.outcomeSelect.value = pockets.includes(remembered) ? remembered : "";
+  dom.recordOutcome.disabled = !dom.outcomeSelect.value;
+  dom.undoOutcome.disabled = !state.historyUndo || state.historyUndo.variantId !== state.variantId;
+  dom.clearHistory.disabled = history.length === 0;
+  dom.historyCount.textContent = history.length === 0
+    ? "Nessun esito registrato"
+    : `${history.length} esit${history.length === 1 ? "o" : "i"} · solo in questo browser`;
+
+  const next = getNextSpinAnalysis(state.variantId, latestOutcome);
+  const probabilityGroups = NEXT_SPIN_GROUPS.map((group) => `
+    <article class="next-spin-group">
+      <h3>${group.label}</h3>
+      <dl>
+        ${group.events.map((eventId) => `
+          <div>
+            <dt>${getEventLabel(eventId, state.variantId)}</dt>
+            <dd>${formatPercent(next.probabilities[eventId])}</dd>
+          </div>
+        `).join("")}
+      </dl>
+    </article>
+  `).join("");
+
+  const summary = latestOutcome
+    ? `L’ultimo esito registrato è <strong>${escapeHtml(describeOutcome(latestOutcome))}</strong>. I valori qui sotto restano uguali dopo qualsiasi altro esito.`
+    : "Le percentuali qui sotto valgono dopo qualunque esito precedente: la roulette non compensa un colore, un pari/dispari o una fascia.";
+
+  dom.nextSpinResult.innerHTML = `
+    <div class="next-spin-summary">${summary}</div>
+    <div class="next-spin-groups">${probabilityGroups}</div>
+    ${renderHistoricalTransitions(history, latestOutcome)}
+  `;
+}
+
 function renderSimulation() {
   if (!state.simulation) {
     dom.simulationResult.textContent = "";
@@ -406,6 +565,45 @@ function renderSimulation() {
     <strong>Simulazione didattica · ${current.spins.toLocaleString("it-IT")} giri</strong>
     <span>Risultato simulato: ${formatSignedCurrency(current.totalNet)} · utile netto osservato: ${formatPercent(current.profitRate)}</span>
   `;
+}
+
+function saveHistoryUndo() {
+  state.historyUndo = {
+    variantId: state.variantId,
+    history: [...getCurrentHistory()],
+  };
+}
+
+function recordOutcome(outcome) {
+  const key = String(outcome);
+  if (!isValidOutcome(key, state.variantId)) return;
+  saveHistoryUndo();
+  const history = getCurrentHistory();
+  history.push(key);
+  if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  persistState();
+  renderAll({ focusSelector: "#outcome-select" });
+  announce(`Esito ${key} registrato. Le probabilità teoriche del prossimo giro non sono cambiate.`);
+}
+
+function undoLastOutcome() {
+  const snapshot = state.historyUndo;
+  if (!snapshot || snapshot.variantId !== state.variantId) return;
+  state.historyByVariant[state.variantId] = [...snapshot.history];
+  state.historyUndo = null;
+  persistState();
+  renderAll({ focusSelector: "#undo-outcome" });
+  announce("Ultima registrazione annullata.");
+}
+
+function clearHistory() {
+  const history = getCurrentHistory();
+  if (history.length === 0) return;
+  saveHistoryUndo();
+  state.historyByVariant[state.variantId] = [];
+  persistState();
+  renderAll({ focusSelector: "#undo-outcome" });
+  announce("Storico degli esiti azzerato. Puoi annullare l'ultima azione.");
 }
 
 function addBet(baseBet, focusSelector = "") {
@@ -770,6 +968,13 @@ function bindEvents() {
   bindNumericInput(dom.chipInput, "chip", { min: 0.1, max: 1000000, label: "Unità di puntata" });
   bindNumericInput(dom.budgetInput, "budget", { min: 1, max: 1000000000, label: "Budget di riferimento" });
   bindNumericInput(dom.spinsInput, "spins", { min: 1, max: 10000, integer: true, label: "Giri per perdita attesa" });
+
+  dom.outcomeSelect.addEventListener("change", () => {
+    dom.recordOutcome.disabled = !dom.outcomeSelect.value;
+  });
+  dom.recordOutcome.addEventListener("click", () => recordOutcome(dom.outcomeSelect.value));
+  dom.undoOutcome.addEventListener("click", undoLastOutcome);
+  dom.clearHistory.addEventListener("click", clearHistory);
 
   dom.quickBets.addEventListener("click", (event) => {
     const button = event.target.closest("[data-bet-id]");
