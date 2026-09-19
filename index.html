@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Calcolatore gratuito di roulette europea e americana: probabilità, valore atteso, copertura e visualizzazione della puntata."
+      content="Calcolatore gratuito di roulette europea e americana: probabilità, rischio e ranking statistico trasparente basato sullo storico."
     />
     <meta name="theme-color" content="#10251f" />
     <link rel="manifest" href="manifest.webmanifest" />
@@ -41,15 +41,15 @@
           </p>
           <div class="hero-points" aria-label="Caratteristiche principali">
             <span>0 e 0+00</span>
-            <span>SVG esportabile</span>
+            <span>Ranking storico</span>
             <span>Nessuna API</span>
           </div>
         </div>
         <aside class="truth-card" aria-label="Promessa di trasparenza">
           <span class="truth-icon" aria-hidden="true">÷</span>
           <div>
-            <strong>Nessun “numero caldo”</strong>
-            <p>Ogni giro è indipendente. Qui trovi solo calcoli verificabili.</p>
+            <strong>Segnali, non certezze</strong>
+            <p>Ogni giro è indipendente. Il ranking storico resta distinto dalle probabilità reali.</p>
           </div>
         </aside>
       </section>
@@ -173,38 +173,9 @@
             <div id="risk-message" class="risk-message"></div>
           </section>
 
-          <section class="panel next-spin-panel" aria-labelledby="next-spin-title">
-            <div class="panel-heading compact-heading">
-              <div>
-                <p class="eyebrow">4. Osserva</p>
-                <h2 id="next-spin-title">Prossimo giro: probabilità</h2>
-              </div>
-              <span class="edge-badge">Teoriche</span>
-            </div>
-            <p id="next-spin-help" class="next-spin-intro">
-              Registra un esito per confrontare il tuo storico con la matematica. In una roulette corretta,
-              l’ultimo risultato non cambia le probabilità del giro successivo.
-            </p>
-            <div class="outcome-entry">
-              <label for="outcome-select">Esito appena uscito</label>
-              <div class="select-row">
-                <select id="outcome-select" aria-describedby="next-spin-help">
-                  <option value="">Seleziona un numero…</option>
-                </select>
-                <button id="record-outcome" class="button secondary" type="button" disabled>Registra</button>
-              </div>
-            </div>
-            <div class="history-actions">
-              <span id="history-count" class="history-count">Nessun esito registrato</span>
-              <button id="undo-outcome" class="text-button" type="button" disabled>Annulla ultimo</button>
-              <button id="clear-history" class="text-button danger" type="button" disabled>Azzera storico</button>
-            </div>
-            <div id="next-spin-result" class="next-spin-result" aria-live="polite"></div>
-          </section>
-
           <section class="panel actions-panel" aria-labelledby="visual-title">
             <div>
-              <p class="eyebrow">5. Visualizza</p>
+              <p class="eyebrow">Visualizza</p>
               <h2 id="visual-title">Controlla la tua scelta</h2>
             </div>
             <p>
@@ -216,6 +187,77 @@
             <div id="simulation-result" class="simulation-result" aria-live="polite"></div>
           </section>
         </aside>
+      </section>
+
+      <section id="signal-lab" class="shell panel signal-lab" aria-labelledby="signal-title">
+        <div class="section-heading signal-heading">
+          <div>
+            <p class="eyebrow">Analisi della sequenza</p>
+            <h2 id="signal-title">Ranking statistico del prossimo giro</h2>
+          </div>
+          <span class="local-badge">Motore locale · nessuna API</span>
+        </div>
+        <p id="signal-input-help" class="signal-intro">
+          Inserisci almeno 10 risultati consecutivi. Il motore ordina numeri e puntate esterne usando
+          frequenza, recenza, transizioni e settori della ruota. Le percentuali sono <strong>quote del modello</strong>,
+          non probabilità fisiche né garanzie di vincita.
+        </p>
+
+        <div class="signal-layout">
+          <div class="signal-input-pane">
+            <div class="sample-progress">
+              <div>
+                <span>Campione inserito</span>
+                <strong id="sample-progress-text">0 / 10</strong>
+              </div>
+              <div class="progress-track" role="progressbar" aria-label="Avanzamento campione" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0">
+                <span id="sample-progress-bar"></span>
+              </div>
+            </div>
+
+            <div id="history-rail" class="history-rail" aria-label="Risultati registrati"></div>
+
+            <div class="number-entry">
+              <label for="outcome-input">Ultimo numero uscito</label>
+              <input
+                id="outcome-input"
+                type="text"
+                inputmode="numeric"
+                maxlength="2"
+                autocomplete="off"
+                placeholder="0–36"
+                aria-describedby="signal-input-help entry-error"
+              />
+              <div id="numeric-keypad" class="numeric-keypad" role="group" aria-label="Tastierino numerico">
+                <button type="button" data-keypad="1">1</button>
+                <button type="button" data-keypad="2">2</button>
+                <button type="button" data-keypad="3">3</button>
+                <button type="button" data-keypad="4">4</button>
+                <button type="button" data-keypad="5">5</button>
+                <button type="button" data-keypad="6">6</button>
+                <button type="button" data-keypad="7">7</button>
+                <button type="button" data-keypad="8">8</button>
+                <button type="button" data-keypad="9">9</button>
+                <button type="button" data-keypad-action="backspace" aria-label="Cancella ultima cifra">⌫</button>
+                <button type="button" data-keypad="0">0</button>
+                <button id="record-outcome" class="keypad-add" type="button" disabled>Aggiungi</button>
+              </div>
+              <p id="entry-error" class="entry-error" role="alert"></p>
+            </div>
+
+            <div class="history-actions">
+              <span id="history-count" class="history-count">Nessun esito registrato</span>
+              <button id="undo-outcome" class="text-button" type="button" disabled>Annulla ultimo</button>
+              <button id="clear-history" class="text-button danger" type="button" disabled>Azzera storico</button>
+            </div>
+
+            <button id="analyze-history" class="button primary full-width" type="button" disabled>
+              Calcola il ranking
+            </button>
+          </div>
+
+          <div id="signal-results" class="signal-results" aria-live="polite"></div>
+        </div>
       </section>
 
       <section id="visual-output" class="shell visual-output" hidden aria-labelledby="visual-output-title">
@@ -239,8 +281,8 @@
       <section class="shell learning-grid" aria-label="Note sul funzionamento">
         <article>
           <span class="learn-number">01</span>
-          <h2>Probabilità esatte</h2>
-          <p>Il calcolo valuta tutti i 37 o 38 esiti possibili: nessuna stima nascosta, nessun modello AI.</p>
+          <h2>Teoria e segnali separati</h2>
+          <p>Le probabilità fisiche restano esatte; il ranking storico è una quota del modello, con metodo e pesi visibili.</p>
         </article>
         <article>
           <span class="learn-number">02</span>

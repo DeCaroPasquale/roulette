@@ -1,20 +1,18 @@
 import {
+  MIN_SIGNAL_HISTORY,
   VARIANTS,
   analyzeBets,
-  classifyOutcome,
+  analyzeHistorySignals,
+  backtestHistorySignals,
   coveredNumbers,
   exposureOnNumber,
   getBetCatalog,
-  getEventLabel,
   getInsideBets,
-  getNextSpinAnalysis,
   getNumberColor,
   getOutsideBets,
   getStraightBets,
-  getTransitionSummary,
   isValidOutcome,
   makeTicket,
-  NEXT_SPIN_GROUPS,
   simulateBets,
 } from "./math.js";
 
@@ -57,12 +55,19 @@ const dom = {
   showTicket: document.querySelector("#show-ticket"),
   simulateButton: document.querySelector("#simulate-button"),
   simulationResult: document.querySelector("#simulation-result"),
-  outcomeSelect: document.querySelector("#outcome-select"),
+  outcomeInput: document.querySelector("#outcome-input"),
+  numericKeypad: document.querySelector("#numeric-keypad"),
   recordOutcome: document.querySelector("#record-outcome"),
   historyCount: document.querySelector("#history-count"),
   undoOutcome: document.querySelector("#undo-outcome"),
   clearHistory: document.querySelector("#clear-history"),
-  nextSpinResult: document.querySelector("#next-spin-result"),
+  analyzeHistory: document.querySelector("#analyze-history"),
+  historyRail: document.querySelector("#history-rail"),
+  sampleProgressText: document.querySelector("#sample-progress-text"),
+  sampleProgressBar: document.querySelector("#sample-progress-bar"),
+  sampleProgressTrack: document.querySelector(".progress-track"),
+  entryError: document.querySelector("#entry-error"),
+  signalResults: document.querySelector("#signal-results"),
   visualOutput: document.querySelector("#visual-output"),
   visualOutputTitle: document.querySelector("#visual-output-title"),
   ticketVisual: document.querySelector("#ticket-visual"),
@@ -95,6 +100,8 @@ const defaults = {
     american: [],
   },
   historyUndo: null,
+  historyNotice: "",
+  signalAnalysisVisible: false,
 };
 
 const state = restoreState();
@@ -130,6 +137,8 @@ function restoreState() {
       undoSnapshot: null,
       historyByVariant,
       historyUndo: null,
+      historyNotice: "",
+      signalAnalysisVisible: false,
     };
   } catch {
     return { ...defaults };
@@ -230,7 +239,7 @@ function renderAll({ syncInputs = true, focusSelector = "" } = {}) {
   renderBoard();
   renderTicket();
   renderMetrics();
-  renderNextSpinPanel();
+  renderSignalLab();
   renderActions();
   renderSimulation();
   dom.chipValueLabel.textContent = formatCurrency(state.chip);
@@ -448,111 +457,189 @@ function getCurrentHistory() {
   return state.historyByVariant[state.variantId];
 }
 
-function describeOutcome(outcome) {
-  const classified = classifyOutcome(outcome);
-  if (!classified) return String(outcome);
-  if (classified.color === "zero") return `${outcome} · zero`;
-  return [
-    outcome,
-    getEventLabel(classified.color, state.variantId),
-    getEventLabel(classified.parity, state.variantId),
-    getEventLabel(classified.range, state.variantId),
-  ].join(" · ");
+function normalizeOutcomeValue(value) {
+  const raw = String(value).trim();
+  if (!raw) return { key: null, error: "Inserisci un numero." };
+  if (!/^\d{1,2}$/.test(raw)) return { key: null, error: "Usa soltanto cifre." };
+  if (raw === "00") {
+    return state.variantId === "american"
+      ? { key: "00", error: "" }
+      : { key: null, error: "Il doppio zero è disponibile solo nella roulette americana." };
+  }
+  const key = String(Number(raw));
+  if (!isValidOutcome(key, state.variantId)) {
+    return { key: null, error: "Inserisci 0 oppure un numero da 1 a 36." };
+  }
+  return { key, error: "" };
 }
 
-function oppositeEvent(eventId) {
-  return {
-    red: "black",
-    black: "red",
-    even: "odd",
-    odd: "even",
-    low: "high",
-    high: "low",
-    zero: "red",
-  }[eventId] ?? "red";
-}
-
-function renderHistoricalTransitions(history, latestOutcome) {
-  if (!latestOutcome) {
-    return `
-      <div class="history-observation empty-observation">
-        <strong>Storico osservato</strong>
-        <p>Registra almeno due esiti per vedere i passaggi registrati. Lo storico resta sul tuo dispositivo.</p>
+function renderHistoryRail(history) {
+  if (history.length === 0) {
+    dom.historyRail.innerHTML = `
+      <div class="empty-history">
+        <span aria-hidden="true">↳</span>
+        <p>I numeri registrati compariranno qui in ordine.</p>
       </div>
     `;
+    return;
   }
 
-  const classified = classifyOutcome(latestOutcome);
-  const rows = [
-    ["Colore", classified.color],
-    ["Pari o dispari", classified.parity],
-    ["Fascia", classified.range],
-  ].map(([label, fromEvent]) => {
-    const toEvent = oppositeEvent(fromEvent);
-    const summary = getTransitionSummary(history, state.variantId, fromEvent, toEvent);
-    const transitionLabel = `${getEventLabel(fromEvent, state.variantId)} → ${getEventLabel(toEvent, state.variantId)}`;
-    const observed = summary.samples > 0
-      ? `${summary.matches}/${summary.samples} · ${formatPercent(summary.observedRate)} osservato · ${formatPercentagePoints(summary.observedRate - summary.theoreticalRate)} rispetto alla teoria`
-      : "Nessun passaggio precedente nel tuo storico";
-    return `
-      <div class="transition-row">
-        <span>${label} · ${transitionLabel}</span>
-        <strong>${observed}</strong>
-      </div>
-    `;
-  }).join("");
+  const visible = history.slice(-32);
+  const hiddenCount = history.length - visible.length;
+  dom.historyRail.innerHTML = `
+    ${hiddenCount > 0 ? `<span class="history-overflow">+${hiddenCount} precedenti</span>` : ""}
+    ${visible.map((outcome, index) => {
+      const color = getNumberColor(outcome);
+      const isLatest = index === visible.length - 1;
+      return `<span class="history-token ${color} ${isLatest ? "latest" : ""}" aria-label="Esito ${outcome}${isLatest ? ", ultimo inserito" : ""}">${outcome}</span>`;
+    }).join("")}
+  `;
+  window.requestAnimationFrame(() => {
+    dom.historyRail.scrollLeft = dom.historyRail.scrollWidth;
+  });
+}
 
+function signalCellMarkup(number, ranking) {
+  const key = String(number);
+  const result = ranking.get(key);
   return `
-    <div class="history-observation">
-      <strong>Nel tuo storico: confronto descrittivo</strong>
-      <p>Un valore osservato diverso dalla teoria può dipendere dal caso; non stima il giro successivo.</p>
-      <div class="transition-list">${rows}</div>
+    <div class="signal-number ${getNumberColor(key)} ${result ? "ranked" : ""}" aria-label="Numero ${key}${result ? `, posizione ${result.rank}, quota modello ${formatPercent(result.modelShare)}` : ""}">
+      <span>${key}</span>
+      ${result ? `<em>${result.rank}</em>` : ""}
     </div>
   `;
 }
 
-function renderNextSpinPanel() {
-  const variant = VARIANTS[state.variantId];
+function buildSignalBoard(analysis) {
+  const ranking = new Map(analysis.topNumbers.map((entry, index) => [entry.number, {
+    ...entry,
+    rank: index + 1,
+  }]));
+  const zeros = analysis.variant.zeroPockets
+    .map((number) => signalCellMarkup(number, ranking))
+    .join("");
+  const numbersMarkup = numberRows
+    .flatMap((row) => row.map((number) => signalCellMarkup(number, ranking)))
+    .join("");
+  return `
+    <div class="signal-board" aria-label="Tavolo con gli otto numeri dal segnale più alto">
+      <div class="signal-zero-area ${analysis.variant.zeroPockets.length === 2 ? "double" : ""}">${zeros}</div>
+      <div class="signal-number-grid">${numbersMarkup}</div>
+    </div>
+  `;
+}
+
+function renderSignalResults(history) {
+  const analysis = analyzeHistorySignals(history, state.variantId);
+  if (!analysis.ready) return;
+  const backtest = backtestHistorySignals(history, state.variantId, 8, 80);
+  const numberRowsMarkup = analysis.topNumbers.map((entry, index) => `
+    <li>
+      <span class="rank-index">${index + 1}</span>
+      <span class="rank-number ${entry.color}">${entry.number}</span>
+      <span class="rank-copy">
+        <strong>${formatPercent(entry.modelShare)}</strong>
+        <small>${formatPercentagePoints(entry.delta)} sulla base teorica · ${entry.driver}</small>
+      </span>
+    </li>
+  `).join("");
+  const outsideRows = analysis.outsideSignals.slice(0, 6).map((entry) => `
+    <li>
+      <span>${entry.label}</span>
+      <strong>${formatPercent(entry.modelShare)}</strong>
+      <small>${formatPercentagePoints(entry.delta)} rispetto alla quota teorica</small>
+    </li>
+  `).join("");
+  const backtestMarkup = backtest.tests > 0
+    ? `
+      <strong>${backtest.hits}/${backtest.tests} centrati</strong>
+      <span>Top ${backtest.topCount}: ${formatPercent(backtest.hitRate)} osservato · riferimento casuale ${formatPercent(backtest.randomBaseline)} · ${formatPercentagePoints(backtest.hitRate - backtest.randomBaseline)}</span>
+    `
+    : `
+      <strong>Verifica non ancora disponibile</strong>
+      <span>Inserisci almeno un altro esito: il sistema controllerà le analisi passate senza usare risultati futuri.</span>
+    `;
+
+  dom.signalResults.innerHTML = `
+    <div class="signal-result-heading">
+      <div>
+        <p class="eyebrow">Risultato del modello</p>
+        <h3 id="signal-results-title" tabindex="-1">Otto numeri con segnale più alto</h3>
+      </div>
+      <span class="quality-badge ${analysis.quality.id}">${analysis.quality.label}</span>
+    </div>
+    <p class="model-summary">
+      ${analysis.sampleSize} esiti analizzati · base matematica per ogni numero ${formatPercent(analysis.baseline)}.
+      Il ranking descrive il campione e non modifica le probabilità reali della roulette.
+    </p>
+    <div class="signal-board-scroll">${buildSignalBoard(analysis)}</div>
+    <div class="signal-detail-grid">
+      <section aria-labelledby="inside-ranking-title">
+        <h4 id="inside-ranking-title">Ranking numeri</h4>
+        <ol class="number-ranking">${numberRowsMarkup}</ol>
+      </section>
+      <section aria-labelledby="outside-ranking-title">
+        <h4 id="outside-ranking-title">Segnali sulle esterne</h4>
+        <ul class="outside-ranking">${outsideRows}</ul>
+      </section>
+    </div>
+    <div class="backtest-card">
+      <span class="backtest-label">Controllo retrospettivo reale</span>
+      ${backtestMarkup}
+    </div>
+    <details class="method-details">
+      <summary>Come viene calcolato</summary>
+      <p>34% frequenza recente, 26% frequenza complessiva, 25% transizioni simili e 15% vicinanza dei settori sulla ruota. Tutto viene ricalcolato sul dispositivo, senza server e senza addestramento nascosto.</p>
+    </details>
+  `;
+}
+
+function renderSignalLab() {
   const history = getCurrentHistory();
-  const latestOutcome = history.at(-1) ?? null;
-  const remembered = dom.outcomeSelect.value;
-  const pockets = variant.pockets.map(String);
-  dom.outcomeSelect.innerHTML = [
-    "<option value=\"\">Seleziona un numero…</option>",
-    ...pockets.map((outcome) => `<option value="${outcome}">Numero ${outcome}</option>`),
-  ].join("");
-  dom.outcomeSelect.value = pockets.includes(remembered) ? remembered : "";
-  dom.recordOutcome.disabled = !dom.outcomeSelect.value;
+  const progress = Math.min(1, history.length / MIN_SIGNAL_HISTORY);
+  const progressCount = Math.min(history.length, MIN_SIGNAL_HISTORY);
+  const inputValue = dom.outcomeInput.value.trim();
+  dom.outcomeInput.placeholder = state.variantId === "american" ? "0, 00 o 1–36" : "0–36";
+  dom.recordOutcome.disabled = inputValue.length === 0;
   dom.undoOutcome.disabled = !state.historyUndo || state.historyUndo.variantId !== state.variantId;
   dom.clearHistory.disabled = history.length === 0;
+  dom.analyzeHistory.disabled = history.length < MIN_SIGNAL_HISTORY;
+  dom.sampleProgressText.textContent = history.length < MIN_SIGNAL_HISTORY
+    ? `${progressCount} / ${MIN_SIGNAL_HISTORY}`
+    : `${history.length} esiti · pronto`;
+  dom.sampleProgressBar.style.width = `${progress * 100}%`;
+  dom.sampleProgressTrack.setAttribute("aria-valuenow", String(progressCount));
   dom.historyCount.textContent = history.length === 0
     ? "Nessun esito registrato"
-    : `${history.length} esit${history.length === 1 ? "o" : "i"} · solo in questo browser`;
+    : `${history.length} esit${history.length === 1 ? "o" : "i"} · ultimo: ${history.at(-1)} · solo in questo browser`;
+  dom.entryError.textContent = state.historyNotice;
+  dom.outcomeInput.toggleAttribute("aria-invalid", Boolean(state.historyNotice));
+  renderHistoryRail(history);
 
-  const next = getNextSpinAnalysis(state.variantId, latestOutcome);
-  const probabilityGroups = NEXT_SPIN_GROUPS.map((group) => `
-    <article class="next-spin-group">
-      <h3>${group.label}</h3>
-      <dl>
-        ${group.events.map((eventId) => `
-          <div>
-            <dt>${getEventLabel(eventId, state.variantId)}</dt>
-            <dd>${formatPercent(next.probabilities[eventId])}</dd>
-          </div>
-        `).join("")}
-      </dl>
-    </article>
-  `).join("");
+  if (history.length < MIN_SIGNAL_HISTORY) {
+    const remaining = MIN_SIGNAL_HISTORY - history.length;
+    dom.signalResults.innerHTML = `
+      <div class="signal-placeholder">
+        <span aria-hidden="true">${history.length === 0 ? "10" : remaining}</span>
+        <h3>${history.length === 0 ? "Inserisci la sequenza" : `Mancan${remaining === 1 ? "a" : "o"} ${remaining} esit${remaining === 1 ? "o" : "i"}`}</h3>
+        <p>Il ranking si attiva con almeno ${MIN_SIGNAL_HISTORY} risultati consecutivi. Puoi inserirne di più per confrontare un campione più ampio.</p>
+      </div>
+    `;
+    return;
+  }
 
-  const summary = latestOutcome
-    ? `L’ultimo esito registrato è <strong>${escapeHtml(describeOutcome(latestOutcome))}</strong>. I valori qui sotto restano uguali dopo qualsiasi altro esito.`
-    : "Le percentuali qui sotto valgono dopo qualunque esito precedente: la roulette non compensa un colore, un pari/dispari o una fascia.";
+  if (!state.signalAnalysisVisible) {
+    dom.signalResults.innerHTML = `
+      <div class="signal-placeholder ready">
+        <span aria-hidden="true">✓</span>
+        <h3>Campione pronto</h3>
+        <p>Premi “Calcola il ranking” per vedere tavolo evidenziato, percentuali del modello e verifica retrospettiva.</p>
+      </div>
+    `;
+    return;
+  }
 
-  dom.nextSpinResult.innerHTML = `
-    <div class="next-spin-summary">${summary}</div>
-    <div class="next-spin-groups">${probabilityGroups}</div>
-    ${renderHistoricalTransitions(history, latestOutcome)}
-  `;
+  renderSignalResults(history);
 }
 
 function renderSimulation() {
@@ -575,15 +662,25 @@ function saveHistoryUndo() {
 }
 
 function recordOutcome(outcome) {
-  const key = String(outcome);
-  if (!isValidOutcome(key, state.variantId)) return;
+  const { key, error } = normalizeOutcomeValue(outcome);
+  if (!key) {
+    state.historyNotice = error;
+    renderSignalLab();
+    dom.outcomeInput.focus();
+    announce(error);
+    return;
+  }
   saveHistoryUndo();
   const history = getCurrentHistory();
   history.push(key);
   if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  state.historyNotice = "";
+  dom.outcomeInput.value = "";
   persistState();
-  renderAll({ focusSelector: "#outcome-select" });
-  announce(`Esito ${key} registrato. Le probabilità teoriche del prossimo giro non sono cambiate.`);
+  renderAll({ focusSelector: "#outcome-input" });
+  announce(history.length >= MIN_SIGNAL_HISTORY
+    ? `Esito ${key} registrato. Il campione contiene ${history.length} risultati ed è pronto per il ranking.`
+    : `Esito ${key} registrato. Mancano ${MIN_SIGNAL_HISTORY - history.length} risultati per attivare il ranking.`);
 }
 
 function undoLastOutcome() {
@@ -591,8 +688,10 @@ function undoLastOutcome() {
   if (!snapshot || snapshot.variantId !== state.variantId) return;
   state.historyByVariant[state.variantId] = [...snapshot.history];
   state.historyUndo = null;
+  state.historyNotice = "";
+  if (state.historyByVariant[state.variantId].length < MIN_SIGNAL_HISTORY) state.signalAnalysisVisible = false;
   persistState();
-  renderAll({ focusSelector: "#undo-outcome" });
+  renderAll({ focusSelector: "#outcome-input" });
   announce("Ultima registrazione annullata.");
 }
 
@@ -601,9 +700,22 @@ function clearHistory() {
   if (history.length === 0) return;
   saveHistoryUndo();
   state.historyByVariant[state.variantId] = [];
+  state.historyNotice = "";
+  state.signalAnalysisVisible = false;
   persistState();
   renderAll({ focusSelector: "#undo-outcome" });
   announce("Storico degli esiti azzerato. Puoi annullare l'ultima azione.");
+}
+
+function showSignalAnalysis() {
+  const history = getCurrentHistory();
+  if (history.length < MIN_SIGNAL_HISTORY) return;
+  state.signalAnalysisVisible = true;
+  renderSignalLab();
+  window.requestAnimationFrame(() => {
+    document.querySelector("#signal-results-title")?.focus();
+  });
+  announce(`Ranking calcolato su ${history.length} esiti. Le percentuali mostrate sono quote del modello, non probabilità garantite.`);
 }
 
 function addBet(baseBet, focusSelector = "") {
@@ -683,6 +795,9 @@ function changeVariant(variantId) {
   state.bets = retainedBets;
   state.visualShown = false;
   state.simulation = null;
+  state.signalAnalysisVisible = false;
+  state.historyNotice = "";
+  dom.outcomeInput.value = "";
   state.notice = droppedBets > 0
     ? `Variante cambiata: mantenute ${retainedBets.length} puntate compatibili e rimosse ${droppedBets} non disponibili con questo tavolo.`
     : "Variante cambiata: le puntate compatibili sono state mantenute e i calcoli sono stati aggiornati.";
@@ -960,6 +1075,13 @@ function bindNumericInput(input, key, config) {
   });
 }
 
+function updateOutcomeEntryState() {
+  state.historyNotice = "";
+  dom.entryError.textContent = "";
+  dom.outcomeInput.removeAttribute("aria-invalid");
+  dom.recordOutcome.disabled = dom.outcomeInput.value.trim().length === 0;
+}
+
 function bindEvents() {
   document.querySelectorAll("input[name=variant]").forEach((input) => {
     input.addEventListener("change", (event) => changeVariant(event.target.value));
@@ -969,12 +1091,31 @@ function bindEvents() {
   bindNumericInput(dom.budgetInput, "budget", { min: 1, max: 1000000000, label: "Budget di riferimento" });
   bindNumericInput(dom.spinsInput, "spins", { min: 1, max: 10000, integer: true, label: "Giri per perdita attesa" });
 
-  dom.outcomeSelect.addEventListener("change", () => {
-    dom.recordOutcome.disabled = !dom.outcomeSelect.value;
+  dom.outcomeInput.addEventListener("input", updateOutcomeEntryState);
+  dom.outcomeInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || dom.outcomeInput.value.trim().length === 0) return;
+    event.preventDefault();
+    recordOutcome(dom.outcomeInput.value);
   });
-  dom.recordOutcome.addEventListener("click", () => recordOutcome(dom.outcomeSelect.value));
+  dom.numericKeypad.addEventListener("click", (event) => {
+    const digitButton = event.target.closest("[data-keypad]");
+    if (digitButton) {
+      dom.outcomeInput.value = `${dom.outcomeInput.value}${digitButton.dataset.keypad}`.slice(0, 2);
+      updateOutcomeEntryState();
+      dom.outcomeInput.focus();
+      return;
+    }
+    const actionButton = event.target.closest("[data-keypad-action]");
+    if (actionButton?.dataset.keypadAction === "backspace") {
+      dom.outcomeInput.value = dom.outcomeInput.value.slice(0, -1);
+      updateOutcomeEntryState();
+      dom.outcomeInput.focus();
+    }
+  });
+  dom.recordOutcome.addEventListener("click", () => recordOutcome(dom.outcomeInput.value));
   dom.undoOutcome.addEventListener("click", undoLastOutcome);
   dom.clearHistory.addEventListener("click", clearHistory);
+  dom.analyzeHistory.addEventListener("click", showSignalAnalysis);
 
   dom.quickBets.addEventListener("click", (event) => {
     const button = event.target.closest("[data-bet-id]");
